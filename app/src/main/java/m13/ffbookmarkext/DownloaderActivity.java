@@ -9,12 +9,15 @@ import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.LayoutInflater;
+import android.view.Menu;
+import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.CheckedTextView;
 import android.widget.ListView;
+import android.widget.ProgressBar;
 import android.widget.TextView;
 
 import java.io.File;
@@ -26,13 +29,14 @@ import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.ListIterator;
 
 public class DownloaderActivity extends AppCompatActivity {
 
     ArrayList<Bookmark> bmarkList;
     ArrayList<Bookmark> failed;
-    Boolean deleteAfterDl;
+    Boolean deleteAfterDl, deleteFailed = false;
     String extStor;
 
     @Override
@@ -41,6 +45,8 @@ public class DownloaderActivity extends AppCompatActivity {
         setContentView(R.layout.activity_downloader);
 
         Button ret = (Button) findViewById(R.id.buttonReturn);
+        ret.setEnabled(false);
+        ret = (Button) findViewById(R.id.buttonExport);
         ret.setEnabled(false);
 
         Bundle bnd = getIntent().getExtras();
@@ -63,9 +69,29 @@ public class DownloaderActivity extends AppCompatActivity {
         dtask.execute(bmarkList);
     }
 
+    @Override
+    public boolean onCreateOptionsMenu(Menu menu)
+    {
+        getMenuInflater().inflate(R.menu.overflow_menu_dl,menu);
+        return true;
+    }
+
+    @Override
+    public boolean onOptionsItemSelected(MenuItem item)
+    {
+        int id = item.getItemId();
+        if(id == R.id.ov_menuitem_deletefailed)
+        {
+            item.setChecked(!item.isChecked());
+            deleteFailed = item.isChecked();
+        }
+        return super.onOptionsItemSelected(item);
+    }
+
     private class DownloadTask extends AsyncTask<ArrayList<Bookmark>, Integer, ArrayList<Bookmark>[]>
     {
         Context context;
+        volatile boolean busy = false;
 
         public DownloadTask(Context c)
         {
@@ -77,10 +103,12 @@ public class DownloaderActivity extends AppCompatActivity {
         {
             ListIterator<Bookmark> iter = blists[0].listIterator();
             ArrayList<Bookmark> del = new ArrayList<>();
-            ArrayList<Bookmark> failed = new ArrayList<>();
+            ArrayList<Bookmark> fail = new ArrayList<>();
 
             String url = null, path = null;
             File ddir, dfile;
+
+            int current = 0;
 
 
             while (iter.hasNext())
@@ -92,15 +120,83 @@ public class DownloaderActivity extends AppCompatActivity {
                     ddir.mkdirs();
                 path = extStor + "/" + Uri.parse(url).getLastPathSegment();
 
-                if(downloadFile(url,path))
+                Boolean failed = false;
+
+                InputStream input = null;
+                OutputStream output = null;
+                HttpURLConnection connection = null;
+                try {
+                    URL Url = new URL(url);
+                    connection = (HttpURLConnection) Url.openConnection();
+                    connection.connect();
+
+                    if (connection.getResponseCode() != HttpURLConnection.HTTP_OK)
+                    {
+                        //return "Server returned HTTP " + connection.getResponseCode() + " " + connection.getResponseMessage();
+                        failed = true;
+                    }
+
+                    if (!failed)
+                    {
+                        int fileLength = connection.getContentLength();
+
+                        input = connection.getInputStream();
+                        output = new FileOutputStream(path);
+
+                        byte data[] = new byte[4096];
+                        long total = 0;
+                        int count;
+                        while ((count = input.read(data)) != -1)
+                        {
+                            total += count;
+                            if (fileLength > 0)
+                            {
+                                if(!busy)
+                                {
+                                    busy = true;
+                                    publishProgress(current,(int)total*100/fileLength,0);
+                                }
+                            }
+
+                            output.write(data, 0, count);
+                        }
+                    }
+                }
+                catch (Exception e)
                 {
-                    publishProgress(b.id);
+                    failed = true;
+                }
+                finally
+                {
+                    try
+                    {
+                        if (output != null)
+                            output.close();
+                        if (input != null)
+                            input.close();
+                    } catch (IOException ignored)
+                    {
+                    }
+
+                    if (connection != null)
+                        connection.disconnect();
+                }
+
+                if(!failed)
+                {
+                    publishProgress(current,100,1);
                     if(deleteAfterDl)
                         del.add(b);
                 }
                 else
-                    failed.add(b);
+                {
+                    fail.add(b);
+                    if(deleteAfterDl && deleteFailed)
+                        del.add(b);
                 }
+
+                current++;
+            }
             return new ArrayList[]{del,failed};
         }
 
@@ -115,28 +211,25 @@ public class DownloaderActivity extends AppCompatActivity {
 
             Button ret = (Button) findViewById(R.id.buttonReturn);
             ret.setEnabled(true);
+            ret = (Button) findViewById(R.id.buttonExport);
+            ret.setEnabled(true);
 
             failed = retl[1];
         }
 
         @Override
-        protected void onProgressUpdate(Integer... id)
+        protected void onProgressUpdate(Integer... arg)
         {
             ListView l = (ListView) findViewById(R.id.listViewDl);
             ListAdapter la = (ListAdapter) l.getAdapter();
             ListIterator<Bookmark> iter = la.bmarkList.listIterator();
-            while(iter.hasNext())
-            {
-                Bookmark bmark = iter.next();
-                if(bmark.id == id[0])
-                {
-                    bmark.select();
-                    iter.set(bmark);
-                    break;
-                }
 
-            }
+            la.progressList.set(arg[0],arg[1]);
+            if(arg[1] == 100)
+                la.bmarkList.get(arg[0]).select();
+
             la.notifyDataSetChanged();
+            busy = false;
         }
     }
 
@@ -194,11 +287,6 @@ public class DownloaderActivity extends AppCompatActivity {
         return true;
     }
 
-    public void updateListView(Bookmark b)
-    {
-
-    }
-
     public void FinishActivity(View view)
     {
         finish();
@@ -233,6 +321,7 @@ public class DownloaderActivity extends AppCompatActivity {
     private class ListAdapter extends ArrayAdapter<Bookmark>
     {
         private ArrayList<Bookmark> bmarkList;
+        private ArrayList<Integer> progressList;
         public int parent;
         public String name;
 
@@ -242,12 +331,13 @@ public class DownloaderActivity extends AppCompatActivity {
             //this.bmarkList = new ArrayList<Bookmark>();
             //this.bmarkList.addAll(bmarkList);
             this.bmarkList = bmarkList;
+            progressList = new ArrayList<>(Collections.nCopies(bmarkList.size(),0));
         }
 
         private class ViewHolder
         {
-            TextView d_url;
             CheckedTextView url;
+            ProgressBar progressBar;
         }
 
         @Override
@@ -264,6 +354,7 @@ public class DownloaderActivity extends AppCompatActivity {
                 holder = new ListAdapter.ViewHolder();
                 //holder.d_url = (TextView) convertView.findViewById(R.id.d_url);
                 holder.url = (CheckedTextView) convertView.findViewById(R.id.checkedTextView);
+                holder.progressBar = (ProgressBar) convertView.findViewById(R.id.progressBar);
                 convertView.setTag(holder);
             }
             else
@@ -276,6 +367,7 @@ public class DownloaderActivity extends AppCompatActivity {
             holder.url.setText(bmark.getUrl());
             holder.url.setChecked(bmark.isSelected());
             holder.url.setTag(bmark);
+            holder.progressBar.setProgress(progressList.get(position));
 
             return convertView;
         }
