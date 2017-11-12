@@ -2,11 +2,16 @@ package m13.ffbookmarkext;
 
 import android.Manifest;
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.content.Context;
+import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.database.Cursor;
 import android.database.SQLException;
+import android.graphics.Color;
+import android.graphics.drawable.ColorDrawable;
+import android.graphics.drawable.Drawable;
 import android.os.Environment;
 import android.os.StrictMode;
 import android.support.v4.app.ActivityCompat;
@@ -49,10 +54,11 @@ public class MainActivity extends AppCompatActivity {
     public String dbfile_orig;
     public static String extStor;
     public String dbBackupDir;
-    boolean deleteAfterDl = false;
+    boolean deleteAfterDl = false, deleteFailed = false;
 
     @Override
-    protected void onCreate(Bundle savedInstanceState) {
+    protected void onCreate(Bundle savedInstanceState)
+    {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
@@ -102,27 +108,7 @@ public class MainActivity extends AppCompatActivity {
             }
         }
 
-
         displayListView(bmarkLists.get(bmarkLists.size()-1));
-    }
-
-    @Override
-    public boolean onCreateOptionsMenu(Menu menu)
-    {
-        getMenuInflater().inflate(R.menu.overflow_menu,menu);
-        return true;
-    }
-
-    @Override
-    public boolean onOptionsItemSelected(MenuItem item)
-    {
-        int id = item.getItemId();
-        if(id == R.id.ov_menuitem_deleteafterdl)
-        {
-            item.setChecked(!item.isChecked());
-            deleteAfterDl = item.isChecked();
-        }
-        return super.onOptionsItemSelected(item);
     }
 
     private void getBookmarkDB()
@@ -215,30 +201,14 @@ public class MainActivity extends AppCompatActivity {
                     deleteList(la.bmarkList,del);
                 displayListView(la);
             }
+
+            deleteAfterDl = false;
+            deleteFailed = false;
         }
     }
 
     private ArrayList<ListAdapter> parseBookmarkDB()
     {
-        //dbfile = this.getFilesDir()+ "/browser3.db";
-        /*SQLiteOpenHelper dbhelper = new SQLiteOpenHelper(getApplicationContext(),"browser.db",null,1) {
-            @Override
-            public void onCreate(SQLiteDatabase sqLiteDatabase) {
-
-            }
-
-            @Override
-            public void onUpgrade(SQLiteDatabase sqLiteDatabase, int i, int i1) {
-
-            }
-
-            public void onOpen(SQLiteDatabase db)
-            {
-
-            }
-        };*/
-        //File export = new File(this.getFilesDir().getAbsolutePath()+"/bookmarks.csv");
-        //dbfile_orig = "/data/data/org.mozilla.firefox_beta/files/mozilla/0aekm8mk.default/browser.db";
         ArrayList<Bookmark> bmarkList = new ArrayList<Bookmark>();
         Bookmark root = null;
         try
@@ -246,13 +216,8 @@ public class MainActivity extends AppCompatActivity {
             File f = new File(dbfile);
             if(!f.exists())
                 return null;
-            //DBHelper dbhelper = new DBHelper(getApplicationContext());
-            //if(!dbhelper.openDataBase())
-                //return null;
-            //SQLiteDatabase db = dbhelper.getReadableDatabase();
             SQLiteDatabase db = SQLiteDatabase.openDatabase(dbfile,null, SQLiteDatabase.OPEN_READONLY);
             Cursor c = db.rawQuery("SELECT _id,title,url,type,parent  FROM bookmarks WHERE not deleted = 1 ORDER BY created",null);
-            //Cursor c = dbhelper.getCursor();
             while(c.moveToNext())
             {
                 String url = c.getString(2), title = c.getString(1);
@@ -287,6 +252,7 @@ public class MainActivity extends AppCompatActivity {
         if(parent.id != 0)
         {
             Bookmark b = new Bookmark(parent.parent,"...","",0,parent.id);
+            b.url = "";
             list.add(b);
         }
 
@@ -311,7 +277,7 @@ public class MainActivity extends AppCompatActivity {
                 }
             }
 
-            if(b.parent == parent.id)
+            if(b.parent == parent.id && b.id != 0)
                 list.add(b);
         }
         ListAdapter listAdapter = new ListAdapter(this,R.layout.bookmark_info,list);
@@ -360,7 +326,7 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    public void getFile(View view)
+    public void getFile()
     {
         ListView listView = (ListView) findViewById(R.id.listView);
         ListAdapter la = (ListAdapter) listView.getAdapter();
@@ -381,6 +347,7 @@ public class MainActivity extends AppCompatActivity {
         Intent i = new Intent(this,DownloaderActivity.class);
         Bundle b = new Bundle();
         b.putBoolean("deleteAfterDl",deleteAfterDl);
+        b.putBoolean("deleteFailed",deleteFailed);
         b.putSerializable("bList",dl);
         b.putString("extStor",extStor);
         i.putExtras(b);
@@ -401,6 +368,32 @@ public class MainActivity extends AppCompatActivity {
         }*/
 
         //Toast.makeText(getApplicationContext(), responseText, Toast.LENGTH_LONG).show();
+    }
+
+    public void showDlOptionsDialog(View view)
+    {
+        String[] opt = {"Delete after download","Delete failed downloads"};
+        ArrayList sel = new ArrayList();
+        AlertDialog.Builder db = new AlertDialog.Builder(this);
+        db.setTitle("Post-download options");
+        db.setMultiChoiceItems(opt, null, new DialogInterface.OnMultiChoiceClickListener()
+        {
+            @Override
+            public void onClick(DialogInterface dialogInterface, int i, boolean b)
+            {
+                if(i == 0)
+                    deleteAfterDl = !deleteAfterDl;
+                if(i == 1)
+                    deleteFailed = !deleteFailed;
+            }
+        }).setPositiveButton("OK", new DialogInterface.OnClickListener() {
+            @Override
+            public void onClick(DialogInterface dialogInterface, int i) {
+                getFile();
+            }
+        });
+        AlertDialog dialog = db.create();
+        dialog.show();
     }
 
     public boolean downloadFile(String sUrl, String dpath)
@@ -552,6 +545,7 @@ public class MainActivity extends AppCompatActivity {
         private ArrayList<Bookmark> bmarkList;
         public int parent;
         public String name;
+        private Drawable drawNoBox = new ColorDrawable(Color.TRANSPARENT);
 
         public ListAdapter(Context context, int textViewResourceId, ArrayList<Bookmark> bmarkList)
         {
@@ -605,7 +599,7 @@ public class MainActivity extends AppCompatActivity {
             }
 
             Bookmark bmark = bmarkList.get(position);
-            if(bmark.type != 0)
+            if(bmark.type == 1)
                 holder.url.setText(" (" +  bmark.getUrl() + ")");
             holder.name.setText(bmark.getTitle());
             holder.name.setChecked(bmark.isSelected());

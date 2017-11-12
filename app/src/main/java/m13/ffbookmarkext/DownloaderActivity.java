@@ -1,6 +1,7 @@
 package m13.ffbookmarkext;
 
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.content.Context;
 import android.content.Intent;
 import android.net.Uri;
@@ -36,7 +37,7 @@ public class DownloaderActivity extends AppCompatActivity {
 
     ArrayList<Bookmark> bmarkList;
     ArrayList<Bookmark> failed;
-    Boolean deleteAfterDl, deleteFailed = false;
+    Boolean deleteAfterDl, deleteFailed;
     String extStor;
 
     @Override
@@ -52,6 +53,7 @@ public class DownloaderActivity extends AppCompatActivity {
         Bundle bnd = getIntent().getExtras();
 
         deleteAfterDl = bnd.getBoolean("deleteAfterDl");
+        deleteFailed = bnd.getBoolean("deleteFailed");
         bmarkList = (ArrayList<Bookmark>) bnd.getSerializable("bList");
         extStor = bnd.getString("extStor");
 
@@ -67,25 +69,6 @@ public class DownloaderActivity extends AppCompatActivity {
 
         final DownloadTask dtask = new DownloadTask(this);
         dtask.execute(bmarkList);
-    }
-
-    @Override
-    public boolean onCreateOptionsMenu(Menu menu)
-    {
-        getMenuInflater().inflate(R.menu.overflow_menu_dl,menu);
-        return true;
-    }
-
-    @Override
-    public boolean onOptionsItemSelected(MenuItem item)
-    {
-        int id = item.getItemId();
-        if(id == R.id.ov_menuitem_deletefailed)
-        {
-            item.setChecked(!item.isChecked());
-            deleteFailed = item.isChecked();
-        }
-        return super.onOptionsItemSelected(item);
     }
 
     private class DownloadTask extends AsyncTask<ArrayList<Bookmark>, Integer, ArrayList<Bookmark>[]>
@@ -197,7 +180,7 @@ public class DownloaderActivity extends AppCompatActivity {
 
                 current++;
             }
-            return new ArrayList[]{del,failed};
+            return new ArrayList[]{del,fail};
         }
 
         @Override
@@ -209,12 +192,21 @@ public class DownloaderActivity extends AppCompatActivity {
             i.putExtras(rb);
             setResult(Activity.RESULT_OK, i);
 
+            failed = retl[1];
+
             Button ret = (Button) findViewById(R.id.buttonReturn);
             ret.setEnabled(true);
             ret = (Button) findViewById(R.id.buttonExport);
-            ret.setEnabled(true);
-
-            failed = retl[1];
+            if(failed.size() > 0)
+            {
+                AlertDialog.Builder db = new AlertDialog.Builder(context);
+                db.setTitle("");
+                db.setMessage(failed.size()+" download(s) failed");
+                db.setPositiveButton("OK",null);
+                AlertDialog dialog = db.create();
+                dialog.show();
+                ret.setEnabled(true);
+            }
         }
 
         @Override
@@ -299,6 +291,10 @@ public class DownloaderActivity extends AppCompatActivity {
 
         String outfpath = extStor + "/failed-" + ts + ".txt";
         File outfile = new File(outfpath);
+
+        AlertDialog.Builder db = new AlertDialog.Builder(this);
+        db.setTitle("Export URLs");
+
         try
         {
             FileWriter writer = new FileWriter(outfile);
@@ -310,12 +306,18 @@ public class DownloaderActivity extends AppCompatActivity {
                 writer.flush();
             }
             writer.close();
+            db.setMessage(failed.size() + " URL(s) exported to "+outfpath);
         }
         catch (IOException e)
         {
             e.printStackTrace();
+            db.setMessage("Failed");
         }
 
+        db.setPositiveButton("OK",null);
+        AlertDialog dialog = db.create();
+        dialog.show();
+        findViewById(R.id.buttonExport).setEnabled(false);
     }
 
     private class ListAdapter extends ArrayAdapter<Bookmark>

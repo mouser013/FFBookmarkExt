@@ -12,7 +12,7 @@
         android:layout_alignParentLeft="true"
         android:focusable="false"
         android:focusableInTouchMode="false"
-        android:text="CheckBox" />
+        android:text="" />
 
     <TextView
         android:id="@+id/url"
@@ -23,6 +23,6 @@
         android:layout_toRightOf="@+id/checkBox1"
         android:maxLines="2"
         android:scrollHorizontally="true"
-        android:text="TextView" />
+        android:text="" />
 
 </RelativeLayout>
