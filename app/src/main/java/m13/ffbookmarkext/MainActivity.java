@@ -1,6 +1,7 @@
 package m13.ffbookmarkext;
 
 import android.Manifest;
+import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.Context;
@@ -14,7 +15,9 @@ import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.Drawable;
 import android.os.Environment;
 import android.os.StrictMode;
+import android.support.annotation.NonNull;
 import android.support.v4.app.ActivityCompat;
+import android.support.v4.content.ContextCompat;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.database.sqlite.*;
@@ -30,7 +33,6 @@ import android.widget.Button;
 import android.widget.CheckBox;
 import android.widget.ListView;
 import android.widget.TextView;
-import android.widget.Toast;
 import android.widget.ToggleButton;
 
 import java.io.BufferedReader;
@@ -90,7 +92,7 @@ public class MainActivity extends AppCompatActivity {
         extStor = Environment.getExternalStorageDirectory() + "/FFBookmarkExt";
         dbBackupDir = extStor + "/backups";
         File f = new File(dbBackupDir);
-        f.mkdirs();
+        boolean mkdirs = f.mkdirs();
 
         getBookmarkDB();
 
@@ -98,13 +100,11 @@ public class MainActivity extends AppCompatActivity {
         if(bmarkLists == null)
             return;
 
-        ListIterator<ListAdapter> liter = bmarkLists.listIterator();
-        while(liter.hasNext())
+        for (ListAdapter bmarkList : bmarkLists)
         {
-            ListIterator<Bookmark> iter = liter.next().bmarkList.listIterator();
-            while(iter.hasNext())
+            for (Bookmark aBmarkList : bmarkList.bmarkList)
             {
-                iter.next().deselect();
+                aBmarkList.deselect();
             }
         }
 
@@ -113,10 +113,10 @@ public class MainActivity extends AppCompatActivity {
 
     private void getBookmarkDB()
     {
-        String profileDir = "/data/data/org.mozilla.firefox_beta/files/mozilla/", browserDBPath = "NOT_FOUND";
-        File f = new File(profileDir);
+        String profileDir = getString(R.string.fpath_profiledir_ffbeta);
+        File f;
         String dir[] = new String[0], profileDirName = "";
-        Process p = null;
+        Process p;
         try {
             p = Runtime.getRuntime().exec("su -c ls "+profileDir+" | grep .default");
             BufferedReader reader = new BufferedReader(
@@ -124,26 +124,19 @@ public class MainActivity extends AppCompatActivity {
 
             int read;
             char[] buffer = new char[4096];
-            StringBuffer output = new StringBuffer();
+            StringBuilder output = new StringBuilder();
             while ((read = reader.read(buffer)) > 0) {
                 output.append(buffer, 0, read);
             }
-            reader.close();;
+            reader.close();
             profileDirName = output.toString().replace("\n","");
             Log.i("out",profileDirName);
             p.waitFor();
 
-        } catch (IOException e) {
-            e.printStackTrace();
-        } catch (InterruptedException e) {
+        } catch (IOException | InterruptedException e) {
             e.printStackTrace();
         }
-        /*
-        for(String n : dir)
-        {
-            if(n.contains(".default") && new File(profileDir+n).isDirectory())
-                browserDBPath = profileDir+n+"/browser.db";
-        }*/
+
         dbfile_orig = profileDir+profileDirName+"/browser.db";
         if(new File(dbfile_orig).isDirectory())
             return;
@@ -194,7 +187,7 @@ public class MainActivity extends AppCompatActivity {
         {
             if(resultCode == Activity.RESULT_OK)
             {
-                ListView listView = (ListView) findViewById(R.id.listView);
+                ListView listView = findViewById(R.id.listView);
                 ListAdapter la = (ListAdapter) listView.getAdapter();
                 ArrayList<Bookmark> del = (ArrayList<Bookmark>) data.getExtras().get("del");
                 if(deleteAfterDl)
@@ -209,7 +202,7 @@ public class MainActivity extends AppCompatActivity {
 
     private ArrayList<ListAdapter> parseBookmarkDB()
     {
-        ArrayList<Bookmark> bmarkList = new ArrayList<Bookmark>();
+        ArrayList<Bookmark> bmarkList = new ArrayList<>();
         Bookmark root = null;
         try
         {
@@ -217,7 +210,7 @@ public class MainActivity extends AppCompatActivity {
             if(!f.exists())
                 return null;
             SQLiteDatabase db = SQLiteDatabase.openDatabase(dbfile,null, SQLiteDatabase.OPEN_READONLY);
-            Cursor c = db.rawQuery("SELECT _id,title,url,type,parent  FROM bookmarks WHERE not deleted = 1 ORDER BY created",null);
+            Cursor c = db.rawQuery(getString(R.string.sql_select_record_query),null);
             while(c.moveToNext())
             {
                 String url = c.getString(2), title = c.getString(1);
@@ -237,7 +230,7 @@ public class MainActivity extends AppCompatActivity {
             return null;
         }
 
-        ArrayList<ListAdapter> bmarkLists = new ArrayList<ListAdapter>();
+        ArrayList<ListAdapter> bmarkLists = new ArrayList<>();
         processBookmarks(bmarkLists,bmarkList,root);
 
         return bmarkLists;
@@ -247,7 +240,7 @@ public class MainActivity extends AppCompatActivity {
     {
         ListIterator<Bookmark> iter = bmarkList.listIterator();
 
-        ArrayList<Bookmark> list = new ArrayList<Bookmark>();
+        ArrayList<Bookmark> list = new ArrayList<>();
 
         if(parent.id != 0)
         {
@@ -261,10 +254,7 @@ public class MainActivity extends AppCompatActivity {
             Bookmark b = iter.next();
             if(b.type == 0) {
                 boolean proc = false;
-                ListIterator<ListAdapter> liter = lists.listIterator();
-                while (liter.hasNext())
-                {
-                    ListAdapter l = liter.next();
+                for (ListAdapter l : lists) {
                     if (l.parent == b.id)
                         proc = true;
                 }
@@ -296,7 +286,7 @@ public class MainActivity extends AppCompatActivity {
         //bmark = new Bookmark(Uri.parse("http://u3"));
         //bmarkList.add(bmark);
 
-        ListView listView = (ListView) findViewById(R.id.listView);
+        ListView listView = findViewById(R.id.listView);
         listView.setAdapter(dataAdapter);
 
 
@@ -305,7 +295,7 @@ public class MainActivity extends AppCompatActivity {
             public void onItemClick(AdapterView<?> parent, View view, int position, long id)
             {
                 Bookmark bmark = (Bookmark) parent.getItemAtPosition(position);
-                Toast.makeText(getApplicationContext(),"Clicked on Row: " + bmark.getUrl(), Toast.LENGTH_LONG).show();
+                //Toast.makeText(getApplicationContext(),"Clicked on Row: " + bmark.getUrl(), Toast.LENGTH_LONG).show();
                 if(bmark.type == 0)
                 {
                     setViewList(bmark);
@@ -317,18 +307,16 @@ public class MainActivity extends AppCompatActivity {
 
     public void setViewList(Bookmark bookmark)
     {
-        ListIterator<ListAdapter> iter = bmarkLists.listIterator();
-        while(iter.hasNext())
+        for (ListAdapter l : bmarkLists)
         {
-            ListAdapter l = iter.next();
-            if(l.parent == bookmark.id)
+            if (l.parent == bookmark.id)
                 displayListView(l);
         }
     }
 
     public void getFile()
     {
-        ListView listView = (ListView) findViewById(R.id.listView);
+        ListView listView = findViewById(R.id.listView);
         ListAdapter la = (ListAdapter) listView.getAdapter();
 
         ListIterator<Bookmark> iter = la.bmarkList.listIterator();
@@ -355,7 +343,7 @@ public class MainActivity extends AppCompatActivity {
 
 
 
-        StringBuffer responseText = new StringBuffer();
+        StringBuilder responseText = new StringBuilder();
         responseText.append("The following were selected...\n");
 
         /*for(int i=0;i<blist.size();i++)
@@ -452,7 +440,7 @@ public class MainActivity extends AppCompatActivity {
 
     public void selectAllNone(View view)
     {
-        ListView listView = (ListView) findViewById(R.id.listView);
+        ListView listView = findViewById(R.id.listView);
         ListAdapter la = (ListAdapter) listView.getAdapter();
         ArrayList<Bookmark> blist = la.bmarkList;
         ListIterator<Bookmark> iter = blist.listIterator();
@@ -473,7 +461,7 @@ public class MainActivity extends AppCompatActivity {
 
     public void deleteBookmarks(View view)
     {
-        ListView listView = (ListView) findViewById(R.id.listView);
+        ListView listView = findViewById(R.id.listView);
         ListAdapter la = (ListAdapter) listView.getAdapter();
         ArrayList<Bookmark> blist = la.bmarkList;
         ListIterator<Bookmark> iter = blist.listIterator();
@@ -489,29 +477,26 @@ public class MainActivity extends AppCompatActivity {
         }
 
         deleteList(la.bmarkList,del);
-        //saveBookmarksDB();
+        saveBookmarksDB();
         displayListView(la);
     }
 
     public void deleteList(ArrayList<Bookmark> list, ArrayList<Bookmark> del)
     {
         SQLiteDatabase db = SQLiteDatabase.openDatabase(dbfile,null, SQLiteDatabase.OPEN_READWRITE);
-        ListIterator<Bookmark> iter = del.listIterator();
-        while(iter.hasNext())
+        for (Bookmark b : del)
         {
-            Bookmark b = iter.next();
             ListIterator<Bookmark> liter = list.listIterator();
-            while(liter.hasNext())
+            while (liter.hasNext())
             {
-                if(liter.next().id == b.id)
+                if (liter.next().id == b.id)
                 {
                     liter.remove();
                     try
                     {
                         //db.rawQuery("DELETE FROM bookmarks WHERE _id = ?",new String[]{String.valueOf(b.getId())});
-                        db.delete("bookmarks","_id = ?",new String[]{Integer.toString(b.getId())});
-                    }
-                    catch(Exception ex)
+                        db.delete("bookmarks", "_id = ?", new String[]{Integer.toString(b.getId())});
+                    } catch (Exception ex)
                     {
                         Log.e("SQLException", ex.getMessage());
                     }
@@ -523,7 +508,7 @@ public class MainActivity extends AppCompatActivity {
 
     public void saveBookmarksDB()
     {
-        Process p = null;
+        Process p;
         try {
             p = Runtime.getRuntime().exec("su -c cat "+ dbfile + " > " + dbfile_orig);
             p.waitFor();
@@ -550,7 +535,7 @@ public class MainActivity extends AppCompatActivity {
         public ListAdapter(Context context, int textViewResourceId, ArrayList<Bookmark> bmarkList)
         {
             super(context,textViewResourceId,bmarkList);
-            this.bmarkList = new ArrayList<Bookmark>();
+            this.bmarkList = new ArrayList<>();
             this.bmarkList.addAll(bmarkList);
         }
 
@@ -558,40 +543,54 @@ public class MainActivity extends AppCompatActivity {
         {
             TextView url;
             CheckBox name;
-        }
 
-        @Override
-        public View getView(int position, View convertView, ViewGroup parent)
-        {
-
-            ViewHolder holder = null;
-            Log.v("ConvertView", String.valueOf(position));
-
-            if (convertView == null) {
-                LayoutInflater vi = (LayoutInflater)getSystemService(Context.LAYOUT_INFLATER_SERVICE);
-                convertView = vi.inflate(R.layout.bookmark_info, null);
-
-                holder = new ViewHolder();
-                holder.url = (TextView) convertView.findViewById(R.id.url);
-                holder.name = (CheckBox) convertView.findViewById(R.id.checkBox1);
-                convertView.setTag(holder);
-
-                holder.name.setOnClickListener( new View.OnClickListener()
+            public ViewHolder(View v)
+            {
+                url = v.findViewById(R.id.url);
+                name = v.findViewById(R.id.checkBox1);
+                name.setOnClickListener( new View.OnClickListener()
                 {
                     public void onClick(View v)
                     {
                         CheckBox cb = (CheckBox) v ;
                         Bookmark bmark = (Bookmark) cb.getTag();
-                        Toast.makeText(getApplicationContext(),
-                                "Clicked on Checkbox: " + cb.getText() +
-                                        " is " + cb.isChecked(),
-                                Toast.LENGTH_LONG).show();
-                        if(cb.isChecked())
-                            bmark.select();
+                        //Toast.makeText(getApplicationContext(),"Clicked on Checkbox: " + cb.getText() +" is " + cb.isChecked(),Toast.LENGTH_LONG).show();
+                        if(bmark.type == 0)
+                            setViewList(bmark);
                         else
-                            bmark.deselect();
+                        {
+                            if(cb.isChecked())
+                                bmark.select();
+                            else
+                                bmark.deselect();
+                        }
                     }
                 });
+            }
+        }
+
+        @SuppressLint({"InflateParams", "SetTextI18n"})
+        @NonNull
+        @Override
+        public View getView(int position, View convertView, @NonNull ViewGroup parent)
+        {
+
+            ViewHolder holder;
+            Log.v("ConvertView", String.valueOf(position));
+
+            if (convertView == null)
+            {
+                LayoutInflater vi = (LayoutInflater)getSystemService(Context.LAYOUT_INFLATER_SERVICE);
+                if (vi != null)
+                {
+                    convertView = vi.inflate(R.layout.bookmark_info, null);
+                }
+
+                holder = new ViewHolder(convertView);
+                //holder.url = (TextView) convertView.findViewById(R.id.url);
+                //holder.name = (CheckBox) convertView.findViewById(R.id.checkBox1);
+                assert convertView != null;
+                convertView.setTag(holder);
             }
             else
             {
@@ -602,7 +601,11 @@ public class MainActivity extends AppCompatActivity {
             if(bmark.type == 1)
                 holder.url.setText(" (" +  bmark.getUrl() + ")");
             holder.name.setText(bmark.getTitle());
+            if(bmark.type == 0)
+                holder.url.setText("");
             holder.name.setChecked(bmark.isSelected());
+            //if(bmark.type == 0)
+                //holder.name.setButtonTintList(this.getContext().getResources().getColorStateList(R.color.checkbox_colors));
             holder.name.setTag(bmark);
 
             return convertView;
@@ -610,7 +613,7 @@ public class MainActivity extends AppCompatActivity {
 
         private void checkButtonClick()
         {
-            Button myButton = (Button) findViewById(R.id.buttonGo);
+            Button myButton = findViewById(R.id.buttonGo);
             myButton.setOnClickListener(new View.OnClickListener()
             {
 

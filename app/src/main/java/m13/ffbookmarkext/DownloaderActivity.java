@@ -1,11 +1,13 @@
 package m13.ffbookmarkext;
 
+import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.Context;
 import android.content.Intent;
 import android.net.Uri;
 import android.os.AsyncTask;
+import android.support.annotation.NonNull;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.util.Log;
@@ -45,21 +47,23 @@ public class DownloaderActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_downloader);
 
-        Button ret = (Button) findViewById(R.id.buttonReturn);
+        Button ret = findViewById(R.id.buttonReturn);
         ret.setEnabled(false);
-        ret = (Button) findViewById(R.id.buttonExport);
+        ret = findViewById(R.id.buttonExport);
         ret.setEnabled(false);
 
         Bundle bnd = getIntent().getExtras();
 
-        deleteAfterDl = bnd.getBoolean("deleteAfterDl");
-        deleteFailed = bnd.getBoolean("deleteFailed");
-        bmarkList = (ArrayList<Bookmark>) bnd.getSerializable("bList");
-        extStor = bnd.getString("extStor");
-
+        if (bnd != null)
+        {
+            deleteAfterDl = bnd.getBoolean("deleteAfterDl");
+            deleteFailed = bnd.getBoolean("deleteFailed");
+            bmarkList = (ArrayList<Bookmark>) bnd.getSerializable("bList");
+            extStor = bnd.getString("extStor");
+        }
 
         ListAdapter la = new ListAdapter(this,R.layout.download_info,bmarkList);
-        ListView lview = (ListView) findViewById(R.id.listViewDl);
+        ListView lview = findViewById(R.id.listViewDl);
         lview.setAdapter(la);
     }
 
@@ -68,28 +72,32 @@ public class DownloaderActivity extends AppCompatActivity {
         super.onResume();
 
         final DownloadTask dtask = new DownloadTask(this);
+        //noinspection unchecked
         dtask.execute(bmarkList);
     }
 
+    @SuppressLint("StaticFieldLeak")
     private class DownloadTask extends AsyncTask<ArrayList<Bookmark>, Integer, ArrayList<Bookmark>[]>
     {
         Context context;
         volatile boolean busy = false;
 
-        public DownloadTask(Context c)
+        DownloadTask(Context c)
         {
             context = c;
         }
 
+        @SuppressWarnings("unchecked")
+        @SafeVarargs
         @Override
-        protected ArrayList[] doInBackground(ArrayList<Bookmark>... blists)
+        protected final ArrayList[] doInBackground(ArrayList<Bookmark>... blists)
         {
             ListIterator<Bookmark> iter = blists[0].listIterator();
             ArrayList<Bookmark> del = new ArrayList<>();
             ArrayList<Bookmark> fail = new ArrayList<>();
 
-            String url = null, path = null;
-            File ddir, dfile;
+            String url, path;
+            File ddir;
 
             int current = 0;
 
@@ -100,6 +108,7 @@ public class DownloaderActivity extends AppCompatActivity {
                 url = b.getUrl();
                 ddir = new File(extStor);
                 if (!ddir.exists())
+                    //noinspection ResultOfMethodCallIgnored
                     ddir.mkdirs();
                 path = extStor + "/" + Uri.parse(url).getLastPathSegment();
 
@@ -194,9 +203,9 @@ public class DownloaderActivity extends AppCompatActivity {
 
             failed = retl[1];
 
-            Button ret = (Button) findViewById(R.id.buttonReturn);
+            Button ret = findViewById(R.id.buttonReturn);
             ret.setEnabled(true);
-            ret = (Button) findViewById(R.id.buttonExport);
+            ret = findViewById(R.id.buttonExport);
             if(failed.size() > 0)
             {
                 AlertDialog.Builder db = new AlertDialog.Builder(context);
@@ -212,7 +221,7 @@ public class DownloaderActivity extends AppCompatActivity {
         @Override
         protected void onProgressUpdate(Integer... arg)
         {
-            ListView l = (ListView) findViewById(R.id.listViewDl);
+            ListView l = findViewById(R.id.listViewDl);
             ListAdapter la = (ListAdapter) l.getAdapter();
             ListIterator<Bookmark> iter = la.bmarkList.listIterator();
 
@@ -298,11 +307,9 @@ public class DownloaderActivity extends AppCompatActivity {
         try
         {
             FileWriter writer = new FileWriter(outfile);
-            ListIterator<Bookmark> iter = failed.listIterator();
-            while(iter.hasNext())
+            for (Bookmark b : failed)
             {
-                Bookmark b = iter.next();
-                writer.append(b.url+"\n");
+                writer.append(b.url).append("\n");
                 writer.flush();
             }
             writer.close();
@@ -342,21 +349,26 @@ public class DownloaderActivity extends AppCompatActivity {
             ProgressBar progressBar;
         }
 
+        @SuppressLint("InflateParams")
+        @NonNull
         @Override
-        public View getView(int position, View convertView, ViewGroup parent)
+        public View getView(int position, View convertView, @NonNull ViewGroup parent)
         {
 
-            ListAdapter.ViewHolder holder = null;
+            ListAdapter.ViewHolder holder;
             Log.v("ConvertView", String.valueOf(position));
 
             if (convertView == null) {
                 LayoutInflater vi = (LayoutInflater)getSystemService(Context.LAYOUT_INFLATER_SERVICE);
-                convertView = vi.inflate(R.layout.download_info, null);
+                if (vi != null)
+                {
+                    convertView = vi.inflate(R.layout.download_info, null);
+                }
 
                 holder = new ListAdapter.ViewHolder();
                 //holder.d_url = (TextView) convertView.findViewById(R.id.d_url);
-                holder.url = (CheckedTextView) convertView.findViewById(R.id.checkedTextView);
-                holder.progressBar = (ProgressBar) convertView.findViewById(R.id.progressBar);
+                holder.url = convertView.findViewById(R.id.checkedTextView);
+                holder.progressBar = convertView.findViewById(R.id.progressBar);
                 convertView.setTag(holder);
             }
             else
@@ -376,7 +388,7 @@ public class DownloaderActivity extends AppCompatActivity {
 
         private void checkButtonClick()
         {
-            Button myButton = (Button) findViewById(R.id.buttonGo);
+            Button myButton = findViewById(R.id.buttonGo);
             myButton.setOnClickListener(new View.OnClickListener()
             {
 
