@@ -11,6 +11,7 @@ import android.support.annotation.NonNull;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.util.Log;
+import android.util.Pair;
 import android.view.LayoutInflater;
 import android.view.Menu;
 import android.view.MenuItem;
@@ -29,6 +30,7 @@ import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.lang.reflect.Array;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.util.ArrayList;
@@ -39,6 +41,7 @@ public class DownloaderActivity extends AppCompatActivity {
 
     ArrayList<Bookmark> bmarkList;
     ArrayList<Bookmark> failed;
+    ArrayList<String> ex;
     Boolean deleteAfterDl, deleteFailed;
     String extStor;
 
@@ -51,6 +54,9 @@ public class DownloaderActivity extends AppCompatActivity {
         ret.setEnabled(false);
         ret = findViewById(R.id.buttonExport);
         ret.setEnabled(false);
+        ret = findViewById(R.id.buttonRetry);
+        ret.setEnabled(false);
+        ret.setVisibility(View.GONE);
 
         Bundle bnd = getIntent().getExtras();
 
@@ -70,14 +76,13 @@ public class DownloaderActivity extends AppCompatActivity {
     @Override
     protected void onResume() {
         super.onResume();
-
-        final DownloadTask dtask = new DownloadTask(this);
+        DownloadTask dtask = new DownloadTask(this);;
         //noinspection unchecked
         dtask.execute(bmarkList);
     }
 
     @SuppressLint("StaticFieldLeak")
-    private class DownloadTask extends AsyncTask<ArrayList<Bookmark>, Integer, ArrayList<Bookmark>[]>
+    private class DownloadTask extends AsyncTask<ArrayList<Bookmark>, Integer, Pair<ArrayList<Bookmark>[], ArrayList<String>>>
     {
         Context context;
         volatile boolean busy = false;
@@ -90,11 +95,12 @@ public class DownloaderActivity extends AppCompatActivity {
         @SuppressWarnings("unchecked")
         @SafeVarargs
         @Override
-        protected final ArrayList[] doInBackground(ArrayList<Bookmark>... blists)
+        protected final Pair<ArrayList<Bookmark>[], ArrayList<String>> doInBackground(ArrayList<Bookmark>... blists)
         {
             ListIterator<Bookmark> iter = blists[0].listIterator();
             ArrayList<Bookmark> del = new ArrayList<>();
             ArrayList<Bookmark> fail = new ArrayList<>();
+            ArrayList<String> ex = new ArrayList<>();
 
             String url, path;
             File ddir;
@@ -104,6 +110,7 @@ public class DownloaderActivity extends AppCompatActivity {
 
             while (iter.hasNext())
             {
+                ((ListView)findViewById(R.id.listViewDl)).smoothScrollToPosition(current);
                 Bookmark b = iter.next();
                 url = b.getUrl();
                 ddir = new File(extStor);
@@ -117,15 +124,22 @@ public class DownloaderActivity extends AppCompatActivity {
                 InputStream input = null;
                 OutputStream output = null;
                 HttpURLConnection connection = null;
-                try {
+                try
+                {
                     URL Url = new URL(url);
                     connection = (HttpURLConnection) Url.openConnection();
+
+                    //connection.setInstanceFollowRedirects(false);
+                    connection.setConnectTimeout(5000);
+
                     connection.connect();
 
-                    if (connection.getResponseCode() != HttpURLConnection.HTTP_OK)
+                    int response = connection.getResponseCode();
+
+                    if (response != HttpURLConnection.HTTP_OK && response != -1 && response != 400)
                     {
                         //return "Server returned HTTP " + connection.getResponseCode() + " " + connection.getResponseMessage();
-                        failed = true;
+                        //failed = false;
                     }
 
                     if (!failed)
@@ -157,6 +171,7 @@ public class DownloaderActivity extends AppCompatActivity {
                 catch (Exception e)
                 {
                     failed = true;
+                    ex.add(e.toString());
                 }
                 finally
                 {
@@ -182,6 +197,7 @@ public class DownloaderActivity extends AppCompatActivity {
                 }
                 else
                 {
+
                     fail.add(b);
                     if(deleteAfterDl && deleteFailed)
                         del.add(b);
@@ -189,23 +205,23 @@ public class DownloaderActivity extends AppCompatActivity {
 
                 current++;
             }
-            return new ArrayList[]{del,fail};
+            return new Pair<ArrayList<Bookmark>[], ArrayList<String>>(new ArrayList[]{del,fail},ex);
         }
 
         @Override
-        protected void onPostExecute(ArrayList<Bookmark>[] retl)
+        protected void onPostExecute(Pair<ArrayList<Bookmark>[], ArrayList<String>> retp)
         {
             Intent i = new Intent();
             Bundle rb = new Bundle();
-            rb.putSerializable("del", retl[0]);
+            rb.putSerializable("del", retp.first[0]);
             i.putExtras(rb);
             setResult(Activity.RESULT_OK, i);
 
-            failed = retl[1];
+            failed = retp.first[1];
+            ex = retp.second;
 
             Button ret = findViewById(R.id.buttonReturn);
             ret.setEnabled(true);
-            ret = findViewById(R.id.buttonExport);
             if(failed.size() > 0)
             {
                 AlertDialog.Builder db = new AlertDialog.Builder(context);
@@ -214,7 +230,11 @@ public class DownloaderActivity extends AppCompatActivity {
                 db.setPositiveButton("OK",null);
                 AlertDialog dialog = db.create();
                 dialog.show();
+                ret = findViewById(R.id.buttonExport);
                 ret.setEnabled(true);
+                ret = findViewById(R.id.buttonRetry);
+                ret.setEnabled(true);
+                ret.setVisibility(View.VISIBLE);
             }
         }
 
@@ -232,60 +252,6 @@ public class DownloaderActivity extends AppCompatActivity {
             la.notifyDataSetChanged();
             busy = false;
         }
-    }
-
-    public boolean downloadFile(String sUrl, String dpath)
-    {
-        InputStream input = null;
-        OutputStream output = null;
-        HttpURLConnection connection = null;
-        try {
-            URL url = new URL(sUrl);
-            connection = (HttpURLConnection) url.openConnection();
-            connection.connect();
-
-            if (connection.getResponseCode() != HttpURLConnection.HTTP_OK)
-            {
-                //return "Server returned HTTP " + connection.getResponseCode() + " " + connection.getResponseMessage();
-                return false;
-            }
-
-            // this will be useful to display download percentage
-            // might be -1: server did not report the length
-            int fileLength = connection.getContentLength();
-
-            input = connection.getInputStream();
-            output = new FileOutputStream(dpath);
-
-            byte data[] = new byte[4096];
-            long total = 0;
-            int count;
-            while ((count = input.read(data)) != -1) {
-                // allow canceling with back button
-                /*if (isCancelled()) {
-                    input.close();
-                    return null;
-                }*/
-                total += count;
-                //if (fileLength > 0) // only if total length is known
-                //    publishProgress((int) (total * 100 / fileLength));
-                output.write(data, 0, count);
-            }
-        } catch (Exception e) {
-            return false;
-        } finally {
-            try {
-                if (output != null)
-                    output.close();
-                if (input != null)
-                    input.close();
-            } catch (IOException ignored) {
-            }
-
-            if (connection != null)
-                connection.disconnect();
-        }
-        return true;
     }
 
     public void FinishActivity(View view)
@@ -306,10 +272,19 @@ public class DownloaderActivity extends AppCompatActivity {
 
         try
         {
+            int i = 0;
             FileWriter writer = new FileWriter(outfile);
             for (Bookmark b : failed)
             {
-                writer.append(b.url).append("\n");
+                i++;
+                writer.append("(").append(Integer.toString(i)).append(")").append(b.url).append("\n");
+                writer.flush();
+            }
+            i = 0;
+            for(String e : ex)
+            {
+                i++;
+                writer.append("(").append(Integer.toString(i)).append(")").append(e).append("\n");
                 writer.flush();
             }
             writer.close();
@@ -325,6 +300,16 @@ public class DownloaderActivity extends AppCompatActivity {
         AlertDialog dialog = db.create();
         dialog.show();
         findViewById(R.id.buttonExport).setEnabled(false);
+    }
+
+    public  void RetryFailed(View view)
+    {
+        ListAdapter la = new ListAdapter(this,R.layout.download_info,failed);
+        ListView lview = findViewById(R.id.listViewDl);
+        lview.setAdapter(la);
+        DownloadTask dtask = new DownloadTask(this);;
+        //noinspection unchecked
+        dtask.execute(failed);
     }
 
     private class ListAdapter extends ArrayAdapter<Bookmark>

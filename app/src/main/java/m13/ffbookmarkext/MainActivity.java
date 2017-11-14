@@ -45,12 +45,12 @@ import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.ListIterator;
 
 public class MainActivity extends AppCompatActivity {
 
-    ListAdapter dataAdapter = null;
     ArrayList<ListAdapter> bmarkLists;
     public String dbfile;
     public String dbfile_orig;
@@ -331,6 +331,21 @@ public class MainActivity extends AppCompatActivity {
                 dl.add(bn);
             }
         }
+
+        final Bookmark d1 = new Bookmark(1,"aaa","http://cdn1.babehub.com/content/150302/3122-kato-steam-girl.jpg",0,0);
+        final Bookmark d2 = new Bookmark(1,"aaa","http://img2.hotsexygirlspics.com/pic/7okaxi1byf.jpg",0,0);
+        final Bookmark d3 = new Bookmark(1,"aaa","http://rule34-data-006.paheal.net/_images/06815193a02c86d803019a347fd72139/1173922%20-%20Slime_girl%20inui_takemaru.jpg",0,0);
+        final Bookmark d4 = new Bookmark(1,"aaa","https://foolz.fireden.net/foolfuuka/boards/d/image/1368/70/1368703515650.png\n",0,0);
+        final Bookmark d5 = new Bookmark(1,"aaa","https://images.sex.com/images/pinporn/2014/07/14/300/6939574.jpg\n",0,0);
+        final Bookmark d6 = new Bookmark(1,"aaa","http://media.manworldmediacdn.com/data/galleries/egotastic-all-stars/000/020/573/mtmwnzcwmzawmdiynjmxmdqz-e30afbf2_web.jpg?1456394800\n",0,0);
+        final Bookmark d7 = new Bookmark(1,"aaa","https://i.4cdn.org/aco/1504722537976.jpg",0,0);
+        final Bookmark d8 = new Bookmark(1,"aaa","https://i.pinimg.com/originals/ee/d4/68/eed4681d12b679baab48b0513aca73f7.jpg\n",0,0);
+        final Bookmark d9 = new Bookmark(1,"aaa","http://www.varporn.com/gifs-with-source/Bent%20over%20on%20the%20couch.gif\n",0,0);
+        //Bookmark d10 = new Bookmark(1,"aaa","",0,0);
+        //Bookmark d11 = new Bookmark(1,"aaa","",0,0);
+
+        dl = new ArrayList<Bookmark>(Arrays.asList(d1,d2,d3,d4,d5,d6,d7,d8,d9));
+
 
         Intent i = new Intent(this,DownloaderActivity.class);
         Bundle b = new Bundle();
